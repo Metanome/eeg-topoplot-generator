@@ -1,0 +1,84 @@
+{
+    "excel_file": "",
+    "output_dir_python": "topography_plots",
+    "output_dir_matlab": "topography_plots_eeglab",
+    "electrodes": [
+        "Fp1",
+        "Fp2",
+        "F7",
+        "F3",
+        "Fz",
+        "F4",
+        "F8",
+        "T3",
+        "C3",
+        "Cz",
+        "C4",
+        "T4",
+        "T5",
+        "P3",
+        "Pz",
+        "P4",
+        "T6",
+        "O1",
+        "O2"
+    ],
+    "bands": [
+        "delta",
+        "theta",
+        "alpha",
+        "beta"
+    ],
+    "eeglab_path": "",
+    "regions": {
+        "Frontal": [
+            "Fp1",
+            "Fp2",
+            "F7",
+            "F3",
+            "Fz",
+            "F4",
+            "F8"
+        ],
+        "Central": [
+            "C3",
+            "Cz",
+            "C4"
+        ],
+        "Temporal": [
+            "T3",
+            "T4",
+            "T5",
+            "T6"
+        ],
+        "Parietal": [
+            "P3",
+            "Pz",
+            "P4"
+        ],
+        "Occipital": [
+            "O1",
+            "O2"
+        ]
+    },
+    "visualization": {
+        "colormap": "viridis",
+        "dpi": 300,
+        "output_format": "png",
+        "num_contours": 6,
+        "font_size_title": 16,
+        "font_size_labels": 10,
+        "figure_size": [
+            8,
+            8
+        ],
+        "electrode_style": "labels",
+        "color_scale": "auto",
+        "plots": {
+            "topoplot": true,
+            "topoplot_combined": true,
+            "regional_bar": true,
+            "heatmap": true
+        }
+    }
+}
