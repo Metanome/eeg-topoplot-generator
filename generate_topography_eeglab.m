@@ -274,6 +274,7 @@ cmap = resolve_colormap(cfg);
 titleSize = get_vis(cfg, 'font_size_title', 16);
 nContours = get_vis(cfg, 'num_contours', 6);
 estyle = get_vis(cfg, 'electrode_style', 'labels');
+powerLabel = get_vis(cfg, 'power_label', 'Absolute Power (µV²)');
 
 
 if get_flag(plots, 'topoplot_combined', true)
@@ -283,7 +284,7 @@ if get_flag(plots, 'topoplot_combined', true)
     nR = ceil(sqrt(numB)); nC = ceil(numB/nR);
     for k = 1:numB
         subplot(nR, nC, k);
-        render_topography(averages.(bands{k}), chanlocs, bands{k}, 14, cmap, nContours, estyle);
+        render_topography(averages.(bands{k}), chanlocs, bands{k}, 14, cmap, nContours, estyle, powerLabel);
     end
     save_figure(hCombined, outputDir, 'combined_topography_eeglab', fmt);
 end
@@ -292,19 +293,19 @@ end
 if get_flag(plots, 'topoplot', true)
     for k = 1:length(bands)
         hSingle = figure('Color', 'w', 'Position', [100, 100, 600, 600], 'Visible', 'off');
-        render_topography(averages.(bands{k}), chanlocs, bands{k}, titleSize, cmap, nContours, estyle);
+        render_topography(averages.(bands{k}), chanlocs, bands{k}, titleSize, cmap, nContours, estyle, powerLabel);
         save_figure(hSingle, outputDir, sprintf('%s_eeglab_topomap', bands{k}), fmt);
     end
 end
 end
 
-function render_topography(data, chanlocs, bandName, titleSize, cmap, nContours, estyle)
+function render_topography(data, chanlocs, bandName, titleSize, cmap, nContours, estyle, powerLabel)
 topoplot(data, chanlocs, 'style', 'both', 'electrodes', estyle, ...
     'numcontour', nContours, ...
     'maplimits', [min(data), max(data)], 'colormap', cmap);
 formatted = [upper(bandName(1)), lower(bandName(2:end))];
 title(sprintf('%s Band', formatted), 'FontSize', titleSize, 'FontWeight', 'bold');
-h = colorbar; ylabel(h, get_vis(cfg, 'power_label', 'Absolute Power (µV²)'));
+h = colorbar; ylabel(h, powerLabel);
 end
 
 function generate_regional_bar_chart(averages, electrodes, cfg, outputDir)
