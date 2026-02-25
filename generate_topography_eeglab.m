@@ -100,11 +100,11 @@ fprintf('Loading and averaging data from %s...\n', dataFile);
 [~,~,ext] = fileparts(dataFile);
 switch lower(ext)
     case '.xlsx'
-        dataTable = readtable(dataFile);
+        dataTable = readtable(dataFile, 'VariableNamingRule', 'preserve');
     case '.csv'
-        dataTable = readtable(dataFile, 'Delimiter', ',');
+        dataTable = readtable(dataFile, 'Delimiter', ',', 'VariableNamingRule', 'preserve');
     case '.txt'
-        dataTable = readtable(dataFile, 'Delimiter', '\t');
+        dataTable = readtable(dataFile, 'Delimiter', '\t', 'VariableNamingRule', 'preserve');
     otherwise
         error('Unsupported file format: %s', ext);
 end
@@ -253,11 +253,16 @@ for bIdx = 1:length(bands)
     for eIdx = 1:length(electrodes)
         colName = sprintf('%s_%s', band, electrodes{eIdx});
         if ismember(colName, tbl.Properties.VariableNames)
-            values(eIdx) = mean(tbl.(colName), 'omitnan');
+            col = tbl.(colName);
+            if iscell(col), col = str2double(col); end
+            values(eIdx) = mean(double(col), 'omitnan');
         else
             values(eIdx) = NaN;
-            warning('topography:missing_col', 'Column "%s" missing.', colName);
         end
+    end
+    if all(isnan(values))
+        warning('topography:missing_band', 'Band "%s" not found in data — check band name spelling in config.', band);
+        continue;
     end
     bandAverages.(band) = values;
     summaries.(band).min = min(values);
@@ -279,11 +284,12 @@ powerLabel = get_vis(cfg, 'power_label', 'Absolute Power (µV²)');
 
 if get_flag(plots, 'topoplot_combined', true)
     hCombined = figure('Color', 'w', 'Position', [100, 100, 1100, 1100], 'Visible', 'off');
-    sgtitle('Grand Average EEG Topography', 'FontSize', 18, 'FontWeight', 'bold');
     numB = length(bands);
     nR = ceil(sqrt(numB)); nC = ceil(numB/nR);
+    tl = tiledlayout(hCombined, nR, nC, 'TileSpacing', 'compact', 'Padding', 'compact');
+    title(tl, 'Grand Average EEG Topography', 'FontSize', 18, 'FontWeight', 'bold');
     for k = 1:numB
-        subplot(nR, nC, k);
+        nexttile(tl);
         render_topography(averages.(bands{k}), chanlocs, bands{k}, 14, cmap, nContours, estyle, powerLabel);
     end
     save_figure(hCombined, outputDir, 'combined_topography_eeglab', fmt);
@@ -362,8 +368,16 @@ for k = 1:nBands
     xPos = hBar(k).XEndPoints;
     yPos = hBar(k).YEndPoints;
     for vi = 1:length(yPos)
-        text(xPos(vi), yPos(vi) + 1, sprintf('%.1f', yPos(vi)), ...
-            'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', ...
+        y = yPos(vi);
+        if y < 0
+            offset = -0.005; va = 'top';
+        else
+            offset = 0.005; va = 'bottom';
+        end
+        valStr = sprintf('%.1f', y);
+        if strcmp(valStr, '-0.0'), valStr = '0.0'; end
+        text(xPos(vi), y + offset, valStr, ...
+            'HorizontalAlignment', 'center', 'VerticalAlignment', va, ...
             'FontSize', labelSize - 2);
     end
 end
@@ -398,12 +412,17 @@ for row = 1:nE
     for col = 1:nB
         val = matrix(row, col);
         normVal = (val - matMin) / matRange;
-        if normVal > 0.6
+        rgbIdx = max(1, round(normVal * (size(cmap,1)-1)) + 1);
+        rgb = cmap(rgbIdx, :);
+        luminance = 0.299*rgb(1) + 0.587*rgb(2) + 0.114*rgb(3);
+        if luminance < 0.5
             txtColor = 'w';
         else
             txtColor = 'k';
         end
-        text(col, row, sprintf('%.1f', val), ...
+        valStr = sprintf('%.1f', val);
+        if strcmp(valStr, '-0.0'), valStr = '0.0'; end
+        text(col, row, valStr, ...
             'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
             'FontSize', labelSize - 2, 'Color', txtColor);
     end
@@ -412,7 +431,7 @@ end
 bandLabels = cellfun(@(b) [upper(b(1)) lower(b(2:end))], bands, 'UniformOutput', false);
 set(gca, 'XTick', 1:nB, 'XTickLabel', bandLabels, 'FontSize', labelSize);
 set(gca, 'YTick', 1:nE, 'YTickLabel', electrodes, 'FontSize', labelSize);
-title('Electrode x Band Power Matrix', 'FontSize', titleSize, 'FontWeight', 'bold');
+title('Electrode × Band Power Matrix', 'FontSize', titleSize, 'FontWeight', 'bold');
 
 save_figure(hFig, outputDir, 'electrode_band_heatmap_eeglab', fmt);
 end

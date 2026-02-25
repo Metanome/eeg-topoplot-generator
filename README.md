@@ -1,6 +1,6 @@
 # EEG Topography Visualization
 
-Generates scalp topography plots, regional power bar charts, and electrode×band heatmaps from qEEG absolute power data. Dual implementations in **Python** (MNE) and **MATLAB** (EEGLAB) produce equivalent outputs from a shared configuration file.
+Generates scalp topography plots, regional power bar charts, and electrode×band heatmaps from qEEG power data. Supports absolute power, relative power, spectral density, or any other band-level metric. Dual implementations in **Python** (MNE) and **MATLAB** (EEGLAB) produce equivalent outputs from a shared configuration file.
 
 ## Requirements
 
@@ -14,7 +14,7 @@ Generates scalp topography plots, regional power bar charts, and electrode×band
 
 ## Quick Start
 
-1. Place your data file (`.xlsx`, `.csv`, or `.txt`) in the `Scripts/` directory
+1. Place your data file (`.xlsx`, `.csv`, or `.txt`) in the `eeg-topoplot-generator/` directory
 2. Run either script:
 
 ### Python
@@ -38,7 +38,7 @@ A tabular file (`.xlsx`, `.csv`, or tab-delimited `.txt`) with columns named `{b
 | Plot Type              | Python Filename                | MATLAB Filename                       |
 | ---------------------- | ------------------------------ | ------------------------------------- |
 | Individual topoplot    | `{band}_topomap.{fmt}`         | `{band}_eeglab_topomap.{fmt}`         |
-| Combined 2×2 topoplot  | `combined_topography.{fmt}`    | `combined_topography_eeglab.{fmt}`    |
+| Combined topoplot      | `combined_topography.{fmt}`    | `combined_topography_eeglab.{fmt}`    |
 | Regional bar chart     | `regional_bar_chart.{fmt}`     | `regional_bar_chart_eeglab.{fmt}`     |
 | Electrode×band heatmap | `electrode_band_heatmap.{fmt}` | `electrode_band_heatmap_eeglab.{fmt}` |
 
@@ -92,27 +92,27 @@ All fields live under the `"visualization"` object:
 
 Under `"visualization" → "plots"`, each boolean enables/disables a plot type:
 
-| Key                 | Default | Description                         |
-| ------------------- | ------- | ----------------------------------- |
-| `topoplot`          | `true`  | Individual band topoplots (4 files) |
-| `topoplot_combined` | `true`  | Combined 2×2 topoplot (1 file)      |
-| `regional_bar`      | `true`  | Regional power bar chart (1 file)   |
-| `heatmap`           | `true`  | Electrode×band heatmap (1 file)     |
+| Key                 | Default | Description                       |
+| ------------------- | ------- | --------------------------------- |
+| `topoplot`          | `true`  | Individual topoplot per band      |
+| `topoplot_combined` | `true`  | Combined topoplot grid (1 file)   |
+| `regional_bar`      | `true`  | Regional power bar chart (1 file) |
+| `heatmap`           | `true`  | Electrode×band heatmap (1 file)   |
 
 ## Platform Differences
 
-| Behavior                  | Python                     | MATLAB                     |
-| ------------------------- | -------------------------- | -------------------------- |
-| Default colormap          | `viridis`                  | `parula` (equivalent)      |
-| Invalid colormap          | Falls back to `viridis`    | Falls back to `parula`     |
-| `electrode_style: "dots"` | Use `"dots"`               | Use `"on"`                 |
-| `figure_size`             | Respected                  | Not used (fixed positions) |
-| `dpi`                     | Controls raster resolution | Not directly used          |
+| Behavior                  | Python                     | MATLAB                                 |
+| ------------------------- | -------------------------- | -------------------------------------- |
+| Default colormap          | `viridis`                  | `parula` (`viridis` mapped internally) |
+| Invalid colormap          | Falls back to `viridis`    | Falls back to `parula`                 |
+| `electrode_style: "dots"` | Use `"dots"`               | Use `"on"`                             |
+| `figure_size`             | Respected                  | Not used (fixed positions)             |
+| `dpi`                     | Controls raster resolution | Not directly used                      |
 
 ## File Structure
 
 ```
-Scripts/
+eeg-topoplot-generator/
 ├── config.json                      # Shared configuration
 ├── generate_topography.py           # Python implementation (MNE)
 ├── generate_topography_eeglab.m     # MATLAB implementation (EEGLAB)

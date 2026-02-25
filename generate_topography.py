@@ -128,8 +128,11 @@ def compute_grand_averages(df: pd.DataFrame, bands: List[str],
     for band in bands:
         cols = [f"{band}_{ch}" for ch in electrodes]
         missing = [c for c in cols if c not in df.columns]
+        if len(missing) == len(cols):
+            logger.warning(f"Band '{band}' not found in data — check band name spelling in config.")
+            continue
         if missing:
-            logger.warning(f"Missing columns for {band}: {missing}")
+            logger.warning(f"Missing columns for '{band}': {missing}")
             continue
         means = df[cols].mean().values
         band_averages[band] = means
@@ -228,8 +231,12 @@ def generate_regional_bar_chart(averages, electrodes, regions, output_path, cfg)
                       color=colors[i], edgecolor='white', linewidth=0.5)
 
         for bar in bars:
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5,
-                    f'{bar.get_height():.1f}', ha='center', va='bottom',
+            h = bar.get_height()
+            label_offset = -0.005 if h < 0 else 0.005
+            va = 'top' if h < 0 else 'bottom'
+            label = f'{h:.1f}'.replace('-0.0', '0.0')
+            ax.text(bar.get_x() + bar.get_width()/2, h + label_offset,
+                    label, ha='center', va=va,
                     fontsize=label_size - 2)
 
     ax.set_xlabel('Brain Region', fontsize=label_size)
@@ -252,17 +259,20 @@ def generate_heatmap(averages, electrodes, output_path, cfg):
 
     matrix = np.column_stack([averages[b] for b in bands])
 
+    cmap_obj = matplotlib.colormaps.get_cmap(_vis(cfg, 'colormap'))
     fig, ax = plt.subplots(figsize=(fig_size[0] * 0.8, fig_size[1] * 1.2))
-    im = ax.imshow(matrix, cmap=_vis(cfg, 'colormap'), aspect='auto')
+    im = ax.imshow(matrix, cmap=cmap_obj, aspect='auto')
 
-
+    mat_min, mat_range = matrix.min(), matrix.max() - matrix.min()
     for i in range(len(electrodes)):
         for j in range(len(bands)):
             val = matrix[i, j]
-
-            norm_val = (val - matrix.min()) / (matrix.max() - matrix.min())
-            text_color = 'white' if norm_val > 0.6 else 'black'
-            ax.text(j, i, f'{val:.1f}', ha='center', va='center',
+            norm_val = (val - mat_min) / mat_range if mat_range != 0 else 0.5
+            rgba = cmap_obj(norm_val)
+            luminance = 0.299 * rgba[0] + 0.587 * rgba[1] + 0.114 * rgba[2]
+            text_color = 'white' if luminance < 0.5 else 'black'
+            label = f'{val:.1f}'.replace('-0.0', '0.0')
+            ax.text(j, i, label, ha='center', va='center',
                     fontsize=label_size - 2, color=text_color)
 
     ax.set_xticks(range(len(bands)))
