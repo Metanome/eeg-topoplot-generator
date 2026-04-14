@@ -75,6 +75,9 @@
         "electrode_style": "labels",
         "color_scale": "auto",
         "power_label": "Absolute Power (µV²)",
+        "mark_significance": false,
+        "sample_size": null,
+        "significance_alpha": 0.05,
         "plots": {
             "topoplot": true,
             "topoplot_combined": true,

@@ -87,6 +87,9 @@ All fields live under the `"visualization"` object:
 | `electrode_style`  | string | `"labels"`               | Topoplot electrode display: `"labels"`, `"dots"`/`"on"`, or `"off"`                                                 |
 | `color_scale`      | string | `"auto"`                 | Color axis scaling (reserved for future use)                                                                        |
 | `power_label`      | string | `"Absolute Power (µV²)"` | Axis label for colorbars and y-axes. Change for relative power, spectral density, etc.                              |
+| `mark_significance`| bool   | `false`                  | Dynamically calculates p-values from Rho and visually highlights significant electrodes (asterisks and red rings).  |
+| `sample_size`      | int    | `null`                   | Sample size of dataset ($N$). Used to calculate exact analytical p-values using degrees of freedom ($N - 2$).       |
+| `significance_alpha`| float  | `0.05`                   | Global significance threshold ($\alpha$). Adjust this to match your calculated False Discovery Rate (FDR) cutoff.   |
 
 ### Plot Toggles
 

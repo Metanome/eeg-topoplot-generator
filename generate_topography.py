@@ -51,6 +51,9 @@ DEFAULTS = {
         "electrode_style": "labels",
         "color_scale": "auto",
         "power_label": "Absolute Power (µV²)",
+        "mark_significance": False,
+        "sample_size": None,
+        "significance_alpha": 0.05,
         "plots": {
             "topoplot": True,
             "topoplot_combined": True,
@@ -65,7 +68,7 @@ def load_config(config_path: str = "config.json") -> dict:
     cfg = DEFAULTS.copy()
     path = Path(config_path)
     if path.exists():
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             user_cfg = json.load(f)
         for key in ['excel_file','output_dir_python','electrodes','bands','eeglab_path','regions']:
             if key in user_cfg:
@@ -154,7 +157,22 @@ def _save_fig(fig, output_path: Path, name: str, cfg: dict):
     plt.close(fig)
 
 
-def plot_single_topomap(data, info, title, ax, cfg):
+def _overlay_significance_markers(ax, info, sig_mask):
+    """Draw red ring markers at significant electrode positions on a topomap axes."""
+    try:
+        from mne.channels.layout import _find_topomap_coords
+        picks = list(range(len(info.ch_names)))
+        pos2d = _find_topomap_coords(info, picks=picks)
+        sig_pos = pos2d[sig_mask]
+        if len(sig_pos):
+            ax.scatter(sig_pos[:, 0], sig_pos[:, 1], s=260,
+                       facecolors='none', edgecolors='red',
+                       linewidths=2.5, zorder=5)
+    except Exception:
+        pass
+
+
+def plot_single_topomap(data, info, title, ax, cfg, sig_mask=None):
     cmap = _vis(cfg, 'colormap')
     contours = _vis(cfg, 'num_contours')
     style = _vis(cfg, 'electrode_style')
@@ -171,8 +189,10 @@ def plot_single_topomap(data, info, title, ax, cfg):
     )
     ax.set_title(title, fontsize=title_size, fontweight='bold')
     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04).set_label(_vis(cfg, 'power_label'))
+    if sig_mask is not None:
+        _overlay_significance_markers(ax, info, sig_mask)
 
-def generate_topoplots(averages, info, output_path, cfg):
+def generate_topoplots(averages, info, output_path, cfg, sig_dict=None):
     bands = list(averages.keys())
     fig_size = _vis(cfg, 'figure_size')
 
@@ -180,7 +200,8 @@ def generate_topoplots(averages, info, output_path, cfg):
     if _plots_enabled(cfg, 'topoplot'):
         for band, data in averages.items():
             fig, ax = plt.subplots(figsize=fig_size)
-            plot_single_topomap(data, info, f"{band.capitalize()} Band", ax, cfg)
+            sig_mask = sig_dict.get(band) if sig_dict else None
+            plot_single_topomap(data, info, f"{band.capitalize()} Band", ax, cfg, sig_mask)
             _save_fig(fig, output_path, f"{band}_topomap", cfg)
 
 
@@ -193,9 +214,10 @@ def generate_topoplots(averages, info, output_path, cfg):
         fig.suptitle('Grand Average EEG Topography', fontsize=20, fontweight='bold')
         axes_flat = axes.flatten() if hasattr(axes, 'flatten') else [axes]
         for idx, band in enumerate(bands):
+            sig_mask = sig_dict.get(band) if sig_dict else None
             plot_single_topomap(averages[band], info,
                                 f"{band.capitalize()} Band",
-                                axes_flat[idx], cfg)
+                                axes_flat[idx], cfg, sig_mask)
         for idx in range(len(bands), len(axes_flat)):
             axes_flat[idx].set_visible(False)
         plt.tight_layout(rect=[0, 0, 1, 0.95])
@@ -250,7 +272,7 @@ def generate_regional_bar_chart(averages, electrodes, regions, output_path, cfg)
     _save_fig(fig, output_path, "regional_bar_chart", cfg)
 
 
-def generate_heatmap(averages, electrodes, output_path, cfg):
+def generate_heatmap(averages, electrodes, output_path, cfg, sig_dict=None):
     bands = list(averages.keys())
     title_size = _vis(cfg, 'font_size_title')
     label_size = _vis(cfg, 'font_size_labels')
@@ -272,6 +294,13 @@ def generate_heatmap(averages, electrodes, output_path, cfg):
             luminance = 0.299 * rgba[0] + 0.587 * rgba[1] + 0.114 * rgba[2]
             text_color = 'white' if luminance < 0.5 else 'black'
             label = f'{val:.1f}'.replace('-0.0', '0.0')
+            is_sig = (sig_dict is not None and
+                      bands[j] in sig_dict and
+                      sig_dict[bands[j]][i])
+            if is_sig:
+                label = label + '*'
+                ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1,
+                             fill=False, edgecolor='red', linewidth=2.5, zorder=3))
             ax.text(j, i, label, ha='center', va='center',
                     fontsize=label_size - 2, color=text_color)
 
@@ -309,7 +338,21 @@ def run_topography_pipeline():
         logger.info(f"Generating plots in '{output_path.absolute()}' (format: {fmt})...")
 
 
-        generate_topoplots(averages, info, output_path, cfg)
+        # Compute significance if configured
+        sig_dict = None
+        if _vis(cfg, 'mark_significance') and _vis(cfg, 'sample_size'):
+            from scipy import stats as _stats
+            n = _vis(cfg, 'sample_size')
+            alpha = _vis(cfg, 'significance_alpha')
+            sig_dict = {}
+            for band, rho in averages.items():
+                t = rho * np.sqrt(n - 2) / np.sqrt(np.maximum(1 - rho**2, 1e-10))
+                p = 2 * _stats.t.sf(np.abs(t), df=n - 2)
+                sig_dict[band] = p < alpha
+            n_sig = sum(int(np.sum(v)) for v in sig_dict.values())
+            logger.info(f"Significance (n={n}, α={alpha}): {n_sig} electrode-band pairs marked.")
+
+        generate_topoplots(averages, info, output_path, cfg, sig_dict)
 
 
         if _plots_enabled(cfg, 'regional_bar'):
@@ -319,7 +362,7 @@ def run_topography_pipeline():
 
 
         if _plots_enabled(cfg, 'heatmap'):
-            generate_heatmap(averages, electrodes, output_path, cfg)
+            generate_heatmap(averages, electrodes, output_path, cfg, sig_dict)
 
         logger.info("Pipeline completed successfully.")
 

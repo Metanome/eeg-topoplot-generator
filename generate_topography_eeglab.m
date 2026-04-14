@@ -118,9 +118,22 @@ fprintf('Exporting plots to "%s/" (format: %s)...\n', outputDir, fmt);
 
 plots = get_vis(cfg, 'plots', struct());
 
+% Compute significance if configured
+sigData = struct();
+if get_vis(cfg, 'mark_significance', false)
+    n = get_vis(cfg, 'sample_size', []);
+    if ~isempty(n) && n > 2
+        alpha = get_vis(cfg, 'significance_alpha', 0.05);
+        sigData = compute_significance(bandAverages, n, alpha);
+        nSig = 0;
+        flds = fieldnames(sigData);
+        for si = 1:length(flds), nSig = nSig + sum(sigData.(flds{si})); end
+        fprintf('Significance (n=%d, alpha=%.2f): %d electrode-band pairs marked.\n', n, alpha, nSig);
+    end
+end
 
 if get_flag(plots, 'topoplot', true) || get_flag(plots, 'topoplot_combined', true)
-    generate_topoplots(bandAverages, chanlocs, outputDir, cfg);
+    generate_topoplots(bandAverages, chanlocs, outputDir, cfg, sigData);
 end
 
 
@@ -130,7 +143,7 @@ end
 
 
 if get_flag(plots, 'heatmap', true)
-    generate_heatmap(bandAverages, electrodes, cfg, outputDir);
+    generate_heatmap(bandAverages, electrodes, cfg, outputDir, sigData);
 end
 
 fprintf('\nPipeline completed successfully.\n');
@@ -271,7 +284,8 @@ for bIdx = 1:length(bands)
 end
 end
 
-function generate_topoplots(averages, chanlocs, outputDir, cfg)
+function generate_topoplots(averages, chanlocs, outputDir, cfg, sigData)
+if nargin < 5, sigData = struct(); end
 bands = fieldnames(averages);
 fmt = get_vis(cfg, 'output_format', 'png');
 plots = get_vis(cfg, 'plots', struct());
@@ -290,7 +304,8 @@ if get_flag(plots, 'topoplot_combined', true)
     title(tl, 'Grand Average EEG Topography', 'FontSize', 18, 'FontWeight', 'bold');
     for k = 1:numB
         nexttile(tl);
-        render_topography(averages.(bands{k}), chanlocs, bands{k}, 14, cmap, nContours, estyle, powerLabel);
+        sigMask = get_sig_mask(sigData, bands{k});
+        render_topography(averages.(bands{k}), chanlocs, bands{k}, 14, cmap, nContours, estyle, powerLabel, sigMask);
     end
     save_figure(hCombined, outputDir, 'combined_topography_eeglab', fmt);
 end
@@ -299,16 +314,44 @@ end
 if get_flag(plots, 'topoplot', true)
     for k = 1:length(bands)
         hSingle = figure('Color', 'w', 'Position', [100, 100, 600, 600], 'Visible', 'off');
-        render_topography(averages.(bands{k}), chanlocs, bands{k}, titleSize, cmap, nContours, estyle, powerLabel);
+        sigMask = get_sig_mask(sigData, bands{k});
+        render_topography(averages.(bands{k}), chanlocs, bands{k}, titleSize, cmap, nContours, estyle, powerLabel, sigMask);
         save_figure(hSingle, outputDir, sprintf('%s_eeglab_topomap', bands{k}), fmt);
     end
 end
 end
 
-function render_topography(data, chanlocs, bandName, titleSize, cmap, nContours, estyle, powerLabel)
-topoplot(data, chanlocs, 'style', 'both', 'electrodes', estyle, ...
-    'numcontour', nContours, ...
-    'maplimits', [min(data), max(data)], 'colormap', cmap);
+function render_topography(data, chanlocs, bandName, titleSize, cmap, nContours, estyle, powerLabel, sigMask)
+if nargin < 9, sigMask = []; end
+sigIdx = find(sigMask);
+
+if ~isempty(sigIdx)
+    topoplot(data, chanlocs, 'style', 'both', 'electrodes', estyle, ...
+        'numcontour', nContours, ...
+        'maplimits', [min(data), max(data)], 'colormap', cmap, ...
+        'emarker2', {sigIdx, 'o', 'r', 12, 2});
+else
+    topoplot(data, chanlocs, 'style', 'both', 'electrodes', estyle, ...
+        'numcontour', nContours, ...
+        'maplimits', [min(data), max(data)], 'colormap', cmap);
+end
+
+if ~isempty(sigIdx)
+    hold on;
+    txtObjs = findobj(gca, 'Type', 'Text');
+    for i = 1:length(sigIdx)
+        lbl = chanlocs(sigIdx(i)).labels;
+        for t = 1:length(txtObjs)
+            if strcmp(strtrim(txtObjs(t).String), lbl)
+                pos = txtObjs(t).Position;
+                scatter(pos(1), pos(2), 350, 'r', 'LineWidth', 3, 'MarkerEdgeColor', 'r', 'MarkerFaceColor', 'none', 'ZData', 10);
+                break;
+            end
+        end
+    end
+    hold off;
+end
+
 formatted = [upper(bandName(1)), lower(bandName(2:end))];
 title(sprintf('%s Band', formatted), 'FontSize', titleSize, 'FontWeight', 'bold');
 h = colorbar; ylabel(h, powerLabel);
@@ -385,7 +428,8 @@ end
 save_figure(hFig, outputDir, 'regional_bar_chart_eeglab', fmt);
 end
 
-function generate_heatmap(averages, electrodes, cfg, outputDir)
+function generate_heatmap(averages, electrodes, cfg, outputDir, sigData)
+if nargin < 5, sigData = struct(); end
 bands = fieldnames(averages);
 fmt = get_vis(cfg, 'output_format', 'png');
 titleSize = get_vis(cfg, 'font_size_title', 16);
@@ -422,6 +466,11 @@ for row = 1:nE
         end
         valStr = sprintf('%.1f', val);
         if strcmp(valStr, '-0.0'), valStr = '0.0'; end
+        isSig = isstruct(sigData) && isfield(sigData, bands{col}) && sigData.(bands{col})(row);
+        if isSig
+            valStr = [valStr '*'];
+            rectangle('Position', [col-0.5, row-0.5, 1, 1], 'EdgeColor', 'r', 'LineWidth', 2.5);
+        end
         text(col, row, valStr, ...
             'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
             'FontSize', labelSize - 2, 'Color', txtColor);
@@ -471,6 +520,9 @@ cfg.visualization = struct(...
     'electrode_style', 'labels', ...
     'color_scale', 'auto', ...
     'power_label', 'Absolute Power (µV²)', ...
+    'mark_significance', false, ...
+    'sample_size', [], ...
+    'significance_alpha', 0.05, ...
     'plots', struct('topoplot',true,'topoplot_combined',true,...
     'regional_bar',true,'heatmap',true));
 end
@@ -510,6 +562,31 @@ try
     cmap = feval(cmapName, 256);
 catch
     cmap = parula(256);
+end
+end
+
+function sigData = compute_significance(bandAverages, n, alpha)
+sigData = struct();
+bands = fieldnames(bandAverages);
+for k = 1:length(bands)
+    band = bands{k};
+    rho = double(bandAverages.(band));
+    t = rho .* sqrt(n - 2) ./ sqrt(max(1 - rho.^2, 1e-10));
+    try
+        p = 2 * (1 - tcdf(abs(t), n - 2));
+        sigData.(band) = p < alpha;
+    catch
+        critT = 2.024;
+        sigData.(band) = abs(t) >= critT;
+    end
+end
+end
+
+function mask = get_sig_mask(sigData, band)
+if isstruct(sigData) && isfield(sigData, band)
+    mask = sigData.(band);
+else
+    mask = [];
 end
 end
 
